@@ -1,7 +1,91 @@
-node_modules
-dist
-.DS_Store
-*.local
+# 🔐 Variables de Entorno (Sensibles)
 .env
 .env.local
 .env.*.local
+.env.production.local
+.env.development.local
+
+# 📦 Dependencias
+node_modules/
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+.pnpm-debug.log
+
+# 📁 Build y Dist
+dist/
+build/
+.next/
+.nuxt/
+out/
+
+# 💾 Base de datos local
+*.db
+*.sqlite
+*.sqlite3
+smartwork_db.sql
+
+# 📝 Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+logs/
+
+# 🖥️ Archivos de sistema
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
+.vscode/settings.json
+.vscode/launch.json
+
+# 🔧 IDEs
+.vscode/
+.idea/
+*.suo
+*.sln
+*.iml
+*.code-workspace
+.IntelliJIDEARemote
+.gradle
+
+# 🔐 SSH y tokens
+.ssh/
+*.pem
+*.key
+private_key*
+
+# 📱 Cachés
+.cache/
+.eslintcache
+.parcel-cache
+.next
+out
+
+# 🧪 Coverage de tests
+coverage/
+.nyc_output/
+
+# 🎯 Otros
+*.pid
+*.pid.lock
+.env.test
+.env.test.local
+dist-ssr/
+*.tgz
+
+# 🖼️ Archivos temporales de editores
+*.bak
+*.tmp
+*.swp
+*~.nib
+
+# 📊 Dependencias opcionales
+optional-npm-cache/
