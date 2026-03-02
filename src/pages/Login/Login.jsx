@@ -4,8 +4,6 @@ import { useAuth } from '../../hooks/useAuth'
 import { validateEmail } from '../../utils/validation'
 import Input from '../../components/Forms/Input'
 import authService from '../../services/authService'
-import { mockUsers } from '../../utils/mockUsers'
-import { loadUsers, saveUsers } from '../../utils/storage'
 
 export const Login = () => {
   const navigate = useNavigate()
@@ -14,19 +12,6 @@ export const Login = () => {
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [generalError, setGeneralError] = useState('')
-
-  // Inicializar usuarios mock en localStorage al cargar
-  useEffect(() => {
-    const initializeMockUsers = () => {
-      const existingUsers = localStorage.getItem('smartworks_users')
-      if (!existingUsers) {
-        // convierte el objeto en un arreglo para facilitar manejo
-        const arr = Object.values(mockUsers)
-        localStorage.setItem('smartworks_users', JSON.stringify(arr))
-      }
-    }
-    initializeMockUsers()
-  }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -62,61 +47,39 @@ export const Login = () => {
     setGeneralError('')
 
     try {
-      // Verificar en usuarios mock primero (para desarrollo)
-      const users = loadUsers()
-      let authenticatedUser = users.find(
-        u => u.email === formData.email && u.password === formData.password
-      )
-
-      // si la cuenta existe pero está pendiente o suspendida, no permitimos login
-      if (authenticatedUser) {
-        if (authenticatedUser.status === 'pending') {
-          setGeneralError('Cuenta pendiente de aprobación por un administrador')
-          setLoading(false)
-          return
-        }
-        if (authenticatedUser.status === 'suspended' || authenticatedUser.isActive === false) {
-          setGeneralError('Cuenta suspendida. Contacta al administrador')
-          setLoading(false)
-          return
-        }
+      // Conectar con API backend
+      const response = await authService.login(formData.email, formData.password)
+      
+      const userData = {
+        id: response.data.usuario.id,
+        email: response.data.usuario.email,
+        nombre: response.data.usuario.nombre,
+        rol: response.data.usuario.rol,
       }
-
-      if (authenticatedUser) {
-        const { password, ...userWithoutPassword } = authenticatedUser
-        localStorage.setItem('authToken', `mock_token_${authenticatedUser.id}`)
-        login(userWithoutPassword)
-        
-        // Redirigir según rol
-        navigateByRole(userWithoutPassword.role)
-      } else {
-        // Intentar con API real
-        try {
-          const response = await authService.login(formData.email, formData.password)
-          const userData = {
-            id: response.data.user.id,
-            email: response.data.user.email,
-            firstName: response.data.user.firstName,
-            lastName: response.data.user.lastName,
-            role: response.data.user.role,
-          }
-          localStorage.setItem('authToken', response.data.token)
-          login(userData)
-          navigateByRole(userData.role)
-        } catch (apiError) {
-          setGeneralError('Correo o contraseña inválidos')
-        }
-      }
+      
+      // Guardar token y usuario
+      login(userData, response.data.token)
+      
+      // Redirigir según rol
+      navigateByRole(userData.rol)
     } catch (error) {
-      setGeneralError('Error al iniciar sesión')
+      console.error('Error de login:', error)
+      if (error.response?.status === 401) {
+        setGeneralError('Correo o contraseña incorrectos')
+      } else {
+        setGeneralError('Error al conectar con el servidor. Verifica que esté ejecutándose.')
+      }
     } finally {
       setLoading(false)
     }
   }
 
   const navigateByRole = (role) => {
-    // Ahora redirige a /dashboard que automáticamente redirige según el rol
-    navigate('/dashboard')
+    if (role === 'admin') {
+      navigate('/admin')
+    } else {
+      navigate('/dashboard')
+    }
   }
 
   return (
@@ -172,42 +135,6 @@ export const Login = () => {
             <Link to="/register" className="text-blue-600 hover:text-blue-800 font-semibold">
               Regístrate aquí
             </Link>
-          </p>
-        </div>
-
-        {/* Card de Información de Usuarios */}
-        <div className="bg-white bg-opacity-95 rounded-xl shadow-lg p-6">
-          <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase flex items-center gap-2">
-            <span className="text-lg">📋</span> Usuarios Disponibles
-          </h3>
-          <div className="space-y-3">
-            {loadUsers().map((user, idx) => (
-              <div key={user.id || idx} className="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-800 text-sm">{user.firstName} {user.lastName}</p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      <span className="inline-block bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                        {user.role} {user.status === 'pending' ? '(pendiente)' : ''}
-                      </span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData({ email: user.email, password: user.password })
-                    }}
-                    className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded font-semibold transition-colors"
-                  >
-                    Usar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 mt-4 italic">
-            💡 Haz clic en "Usar" para cargar las credenciales automáticamente
           </p>
         </div>
       </div>

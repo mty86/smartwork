@@ -1,52 +1,42 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { FiTrash2, FiEdit2, FiPlus } from 'react-icons/fi'
-import { loadUsers, saveUsers, loadCategories, saveCategories, loadPlans, savePlans } from '../../utils/storage'
-import { PROFESSIONAL_CATEGORIES, TRADE_CATEGORIES } from '../../utils/constants'
+import { FiTrash2, FiEdit2 } from 'react-icons/fi'
+import userService from '../../services/userService'
 
 export const AdminPanel = () => {
   const { user, logout, userRole } = useAuth()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('users')
   const [users, setUsers] = useState([])
-  const [categories, setCategories] = useState([])
-  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const [showAdminModal, setShowAdminModal] = useState(false)
-  const [newAdmin, setNewAdmin] = useState({ firstName: '', lastName: '', email: '', password: '' })
-  const [showCategoryModal, setShowCategoryModal] = useState(false)
-  const [newCategory, setNewCategory] = useState({ name: '', type: 'professional' })
-  const [showPlanModal, setShowPlanModal] = useState(false)
-  const [newPlan, setNewPlan] = useState({ name: '', price: '', description: '' })
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [editFormData, setEditFormData] = useState({})
 
-  // cargar datos desde almacenamiento local
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newUserData, setNewUserData] = useState({ email: '', password: '', nombre: '', rol: 'usuario' })
+  const [createError, setCreateError] = useState('')
+
+  // Cargar usuarios desde la API
   useEffect(() => {
-    const u = loadUsers()
-    setUsers(u)
-
-    let cats = loadCategories()
-    if (cats.length === 0) {
-      // inicializar con valores por defecto
-      cats = [
-        ...PROFESSIONAL_CATEGORIES.map(c => ({ ...c, type: 'professional' })),
-        ...TRADE_CATEGORIES.map(c => ({ ...c, type: 'trade' })),
-      ]
-      saveCategories(cats)
-    }
-    setCategories(cats)
-
-    let pls = loadPlans()
-    if (pls.length === 0) {
-      pls = [
-        { id: 1, name: 'Gratuito', price: 0, description: '' },
-        { id: 2, name: 'Básico', price: 9.99, description: '' },
-        { id: 3, name: 'Profesional', price: 29.99, description: '' },
-      ]
-      savePlans(pls)
-    }
-    setPlans(pls)
+    fetchUsers()
   }, [])
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true)
+      const response = await userService.getAllUsers()
+      setUsers(response.data)
+      setError('')
+    } catch (err) {
+      console.error('Error al cargar usuarios:', err)
+      setError('Error al cargar los usuarios. Verifica que el backend esté ejecutándose.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (userRole !== 'admin') {
     return (
@@ -74,98 +64,81 @@ export const AdminPanel = () => {
     navigate('/')
   }
 
-  // helper counts
-  const countsByType = {
-    professional: users.filter(u => u.role === 'professional').length,
-    trade: users.filter(u => u.role === 'trade').length,
-    business: users.filter(u => u.role === 'business').length,
-  }
-
-  // user actions
-  const suspendUser = (id) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'active' ? 'suspended' : 'active' } : u))
-  }
-  const deleteUser = (id) => {
-    setUsers(prev => prev.filter(u => u.id !== id))
-  }
-  const changeUserPlan = (id) => {
-    const plan = prompt('Ingrese el nuevo plan o descripción:')
-    if (plan) {
-      setUsers(prev => prev.map(u => u.id === id ? { ...u, plan } : u))
-    }
-  }
-
-  const approveProfessional = (id) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'active', isActive: true } : u))
-  }
-  const rejectProfessional = (id) => {
-    setUsers(prev => prev.filter(u => u.id !== id))
-  }
-
-  // persist changes to storage whenever users/categories/plans change
-  useEffect(() => {
-    saveUsers(users)
-  }, [users])
-  useEffect(() => {
-    saveCategories(categories)
-  }, [categories])
-  useEffect(() => {
-    savePlans(plans)
-  }, [plans])
-
-  // category admin functions
-  const addCategory = (cat) => {
-    setCategories(prev => [...prev, { ...cat, id: Date.now() }])
-  }
-  const removeCategory = (id) => {
-    setCategories(prev => prev.filter(c => c.id !== id))
-  }
-
-  // admin management
-  const addAdmin = () => {
-    if (newAdmin.email && newAdmin.password) {
-      const adminUser = {
-        id: `user_${Date.now()}`,
-        ...newAdmin,
-        role: 'admin',
-        status: 'active',
-        isActive: true,
+  const handleDeleteUser = async (id) => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
+      try {
+        await userService.deleteUser(id)
+        fetchUsers()
+      } catch (err) {
+        setError('Error al eliminar el usuario')
       }
-      setUsers(prev => [...prev, adminUser])
-      setShowAdminModal(false)
-      setNewAdmin({ firstName: '', lastName: '', email: '', password: '' })
     }
-  }
-  const removeAdmin = (id) => {
-    setUsers(prev => prev.filter(u => !(u.role === 'admin' && u.id === id)))
   }
 
-  // plan management
-  const addPlan = () => {
-    if (newPlan.name) {
-      setPlans(prev => [...prev, { ...newPlan, id: Date.now() }])
-      setShowPlanModal(false)
-      setNewPlan({ name: '', price: '', description: '' })
+  const handleEditUser = (u) => {
+    setEditingUser(u)
+    setEditFormData({ email: u.email, nombre: u.nombre, rol: u.rol })
+    setShowEditModal(true)
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      await userService.updateUser(editingUser.id, editFormData)
+      setShowEditModal(false)
+      setEditingUser(null)
+      fetchUsers()
+    } catch (err) {
+      setError('Error al actualizar el usuario')
     }
   }
-  const editPlan = (id) => {
-    const p = plans.find(pl => pl.id === id)
-    if (!p) return
-    const price = prompt('Nuevo precio', p.price)
-    const description = prompt('Nueva descripción', p.description || '')
-    setPlans(prev => prev.map(pl => pl.id === id ? { ...pl, price: price !== null ? Number(price) : pl.price, description } : pl))
+
+  const handleCreateUser = async () => {
+    try {
+      setCreateError('')
+      
+      // Validaciones
+      if (!newUserData.email || !newUserData.password || !newUserData.nombre) {
+        setCreateError('Todos los campos son requeridos')
+        return
+      }
+
+      if (newUserData.password.length < 6) {
+        setCreateError('La contraseña debe tener al menos 6 caracteres')
+        return
+      }
+
+      // Crear usuario
+      await userService.createUser(newUserData)
+      
+      // Limpiar formulario
+      setNewUserData({ email: '', password: '', nombre: '', rol: 'usuario' })
+      setShowCreateModal(false)
+      
+      // Recargar lista
+      fetchUsers()
+    } catch (err) {
+      setCreateError(err.response?.data?.error || 'Error al crear el usuario')
+    }
   }
-  const deletePlan = (id) => {
-    setPlans(prev => prev.filter(p => p.id !== id))
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="max-w-6xl mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">
-            Panel de Administrador
-          </h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">Panel de Administrador</h1>
+            <p className="text-gray-600 mt-2">Bienvenido, {user?.nombre}</p>
+          </div>
           <button
             onClick={handleLogout}
             className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg"
@@ -174,339 +147,226 @@ export const AdminPanel = () => {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b">
-          {['users', 'categories', 'plans', 'pending', 'admins'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 font-semibold transition-colors capitalize ${
-                activeTab === tab
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              {tab === 'users' && 'Usuarios'}
-              {tab === 'categories' && 'Categorías'}
-              {tab === 'plans' && 'Planes'}
-              {tab === 'pending' && 'Filtro'}
-              {tab === 'admins' && 'Administradores'}
-            </button>
-          ))}
-        </div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
 
-        {/* Users Tab */}
-        {activeTab === 'users' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Gestión de Usuarios</h2>
-            </div>
-            {/* counts */}
-            <div className="mb-4 flex gap-4">
-              <span className="bg-blue-100 px-3 py-1 rounded">Profesionales: {countsByType.professional}</span>
-              <span className="bg-blue-100 px-3 py-1 rounded">Oficios: {countsByType.trade}</span>
-              <span className="bg-blue-100 px-3 py-1 rounded">Negocios: {countsByType.business}</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
+        {/* Tabla de Usuarios */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">Gestión de Usuarios</h2>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+            >
+              + Crear Usuario
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">ID</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Nombre</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Email</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Rol</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Fecha Registro</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
                   <tr>
-                    <th className="px-4 py-2 text-left">Nombre</th>
-                    <th className="px-4 py-2 text-left">Email</th>
-                    <th className="px-4 py-2 text-left">Rol</th>
-                    <th className="px-4 py-2 text-left">Estado</th>
-                    <th className="px-4 py-2 text-left">Plan</th>
-                    <th className="px-4 py-2 text-left">Acciones</th>
+                    <td colSpan="6" className="px-4 py-3 text-center text-gray-500">
+                      No hay usuarios registrados
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {users.map(user => (
-                    <tr key={user.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3">{user.firstName} {user.lastName}</td>
-                      <td className="px-4 py-3">{user.email}</td>
-                      <td className="px-4 py-3">{user.role}</td>
+                ) : (
+                  users.map(u => (
+                    <tr key={u.id} className="border-b hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 text-sm text-gray-700">{u.id}</td>
+                      <td className="px-4 py-3 text-gray-800">{u.nombre}</td>
+                      <td className="px-4 py-3 text-gray-700">{u.email}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-3 py-1 rounded-full text-sm ${user.status === 'active' ? 'bg-green-100 text-green-800' : user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
-                          {user.status}
+                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          u.rol === 'admin' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {u.rol}
                         </span>
                       </td>
-                      <td className="px-4 py-3">{user.plan || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {new Date(u.fecha_registro).toLocaleDateString('es-ES')}
+                      </td>
                       <td className="px-4 py-3 flex gap-2">
-                        <button onClick={() => suspendUser(user.id)} className="text-yellow-600 hover:text-yellow-800" title="Suspender/Activar">
-                          🛑
+                        <button 
+                          onClick={() => handleEditUser(u)}
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1 rounded transition-colors"
+                          title="Editar"
+                        >
+                          <FiEdit2 size={18} />
                         </button>
-                        <button onClick={() => changeUserPlan(user.id)} className="text-blue-600 hover:text-blue-800" title="Cambiar plan">
-                          💳
-                        </button>
-                        <button onClick={() => deleteUser(user.id)} className="text-red-600 hover:text-red-800" title="Eliminar">
-                          <FiTrash2 />
-                        </button>
+                        {u.rol !== 'admin' && (
+                          <button 
+                            onClick={() => handleDeleteUser(u.id)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded transition-colors"
+                            title="Eliminar"
+                          >
+                            <FiTrash2 size={18} />
+                          </button>
+                        )}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-
-        {/* Pending validations Tab */}
-        {activeTab === 'pending' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Profesionales Pendientes</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Nombre</th>
-                    <th className="px-4 py-2 text-left">Email</th>
-                    <th className="px-4 py-2 text-left">Especialidad</th>
-                    <th className="px-4 py-2 text-left">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.filter(u => u.role === 'professional' && u.status === 'pending').map(u => (
-                    <tr key={u.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3">{u.firstName} {u.lastName}</td>
-                      <td className="px-4 py-3">{u.email}</td>
-                      <td className="px-4 py-3">{u.specialty || '-'}</td>
-                      <td className="px-4 py-3 flex gap-2">
-                        <button onClick={() => approveProfessional(u.id)} className="text-green-600 hover:text-green-800">✔️</button>
-                        <button onClick={() => rejectProfessional(u.id)} className="text-red-600 hover:text-red-800">✖️</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Categories Tab */}
-        {activeTab === 'categories' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Gestión de Categorías</h2>
-              <button onClick={() => setShowCategoryModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                <FiPlus /> Nueva Categoría
-              </button>
-            </div>
-            {/* group by type */}
-            {['professional', 'trade', 'business'].map(type => (
-              <div key={type} className="mb-8">
-                <h3 className="text-xl font-semibold capitalize mb-2">{type === 'professional' ? 'Profesionales' : type === 'trade' ? 'Oficios' : 'Negocios'}</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-4 py-2 text-left">Nombre</th>
-                        <th className="px-4 py-2 text-left">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {categories.filter(c => c.type === type).map(cat => (
-                        <tr key={cat.id} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-3">{cat.name}</td>
-                          <td className="px-4 py-3 flex gap-2">
-                            <button onClick={() => removeCategory(cat.id)} className="text-red-600 hover:text-red-800">
-                              <FiTrash2 />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Plans Tab */}
-        {activeTab === 'plans' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Gestión de Planes</h2>
-              <button onClick={() => setShowPlanModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                <FiPlus /> Nuevo Plan
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Nombre</th>
-                    <th className="px-4 py-2 text-left">Precio</th>
-                    <th className="px-4 py-2 text-left">Descripción</th>
-                    <th className="px-4 py-2 text-left">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plans.map(plan => (
-                    <tr key={plan.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3">{plan.name}</td>
-                      <td className="px-4 py-3">${plan.price}</td>
-                      <td className="px-4 py-3">{plan.description || '-'}</td>
-                      <td className="px-4 py-3 flex gap-2">
-                        <button onClick={() => editPlan(plan.id)} className="text-blue-600 hover:text-blue-800" title="Editar">
-                          <FiEdit2 />
-                        </button>
-                        <button onClick={() => deletePlan(plan.id)} className="text-red-600 hover:text-red-800" title="Eliminar">
-                          <FiTrash2 />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Admins Tab */}
-        {activeTab === 'admins' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Administradores</h2>
-              <button onClick={() => setShowAdminModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                <FiPlus /> Nuevo Admin
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Nombre</th>
-                    <th className="px-4 py-2 text-left">Email</th>
-                    <th className="px-4 py-2 text-left">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.filter(u => u.role === 'admin').map(a => (
-                    <tr key={a.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3">{a.firstName} {a.lastName}</td>
-                      <td className="px-4 py-3">{a.email}</td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => removeAdmin(a.id)} className="text-red-600 hover:text-red-800">
-                          <FiTrash2 />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Modals */}
-      {showAdminModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Agregar Administrador</h3>
+      {/* Modal de Edición */}
+      {showEditModal && editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Editar Usuario</h3>
+            
             <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Nombre"
-                value={newAdmin.firstName}
-                onChange={e => setNewAdmin(prev => ({ ...prev, firstName: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
-              <input
-                type="text"
-                placeholder="Apellido"
-                value={newAdmin.lastName}
-                onChange={e => setNewAdmin(prev => ({ ...prev, lastName: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={newAdmin.email}
-                onChange={e => setNewAdmin(prev => ({ ...prev, email: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
-              <input
-                type="password"
-                placeholder="Contraseña"
-                value={newAdmin.password}
-                onChange={e => setNewAdmin(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre</label>
+                <input
+                  type="text"
+                  value={editFormData.nombre}
+                  onChange={(e) => setEditFormData({ ...editFormData, nombre: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Rol</label>
+                <select
+                  value={editFormData.rol}
+                  onChange={(e) => setEditFormData({ ...editFormData, rol: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                >
+                  <option value="usuario">Usuario</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setShowAdminModal(false)} className="px-4 py-2">Cancelar</button>
-              <button onClick={addAdmin} className="bg-blue-600 text-white px-4 py-2 rounded">Agregar</button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {showCategoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Agregar Categoría</h3>
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Nombre de categoría"
-                value={newCategory.name}
-                onChange={e => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
-              <select
-                value={newCategory.type}
-                onChange={e => setNewCategory(prev => ({ ...prev, type: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
-                <option value="professional">Profesional</option>
-                <option value="trade">Oficio</option>
-                <option value="business">Negocio</option>
-              </select>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setShowCategoryModal(false)} className="px-4 py-2">Cancelar</button>
-              <button onClick={() => { addCategory(newCategory); setShowCategoryModal(false) }} className="bg-blue-600 text-white px-4 py-2 rounded">Agregar</button>
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                Guardar Cambios
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {showPlanModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Agregar Plan</h3>
+      {/* Modal de Crear Usuario */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Crear Nuevo Usuario</h3>
+            
+            {createError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg mb-4 text-sm">
+                {createError}
+              </div>
+            )}
+            
             <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Nombre del plan"
-                value={newPlan.name}
-                onChange={e => setNewPlan(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
-              <input
-                type="number"
-                placeholder="Precio"
-                value={newPlan.price}
-                onChange={e => setNewPlan(prev => ({ ...prev, price: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
-              <textarea
-                placeholder="Descripción"
-                value={newPlan.description}
-                onChange={e => setNewPlan(prev => ({ ...prev, description: e.target.value }))}
-                className="w-full border px-3 py-2 rounded"
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newUserData.email}
+                  onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                  placeholder="usuario@ejemplo.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  value={newUserData.nombre}
+                  onChange={(e) => setNewUserData({ ...newUserData, nombre: e.target.value })}
+                  placeholder="Juan Pérez"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Contraseña</label>
+                <input
+                  type="password"
+                  value={newUserData.password}
+                  onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                  placeholder="Mínimo 6 caracteres"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Rol</label>
+                <select
+                  value={newUserData.rol}
+                  onChange={(e) => setNewUserData({ ...newUserData, rol: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                >
+                  <option value="usuario">Usuario</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setShowPlanModal(false)} className="px-4 py-2">Cancelar</button>
-              <button onClick={addPlan} className="bg-blue-600 text-white px-4 py-2 rounded">Agregar</button>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false)
+                  setCreateError('')
+                  setNewUserData({ email: '', password: '', nombre: '', rol: 'usuario' })
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateUser}
+                className="px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+              >
+                Crear Usuario
+              </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   )
 }

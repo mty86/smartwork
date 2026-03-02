@@ -5,7 +5,6 @@ import { validateEmail, validatePassword, validatePhone } from '../../utils/vali
 import { PROFESSIONAL_CATEGORIES, TRADE_CATEGORIES, USER_ROLES } from '../../utils/constants'
 import Input from '../../components/Forms/Input'
 import authService from '../../services/authService'
-import { loadUsers, saveUsers, loadCategories } from '../../utils/storage'
 
 export const Register = () => {
   const navigate = useNavigate()
@@ -35,9 +34,9 @@ export const Register = () => {
   const [generalError, setGeneralError] = useState('')
 
   useEffect(() => {
-    const cats = loadCategories()
-    setProfessionCategories(cats.filter(c => c.type === 'professional'))
-    setTradeCategories(cats.filter(c => c.type === 'trade'))
+    // Cargar categorías locales (esto se puede mantener así por ahora)
+    setProfessionCategories(PROFESSIONAL_CATEGORIES)
+    setTradeCategories(TRADE_CATEGORIES)
   }, [])
 
   const handleUserTypeSelect = (type) => {
@@ -131,61 +130,30 @@ export const Register = () => {
     setGeneralError('')
 
     try {
-      let registerData = {
+      // Preparar datos para registro
+      const registerData = {
         email: formData.email,
         password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+        nombre: `${formData.firstName} ${formData.lastName}`,
+        rol: 'usuario' // Por defecto en la API, pero se puede extender
       }
 
-      if (userType === 'client') {
-        registerData.role = USER_ROLES.CLIENT
-      } else if (userType === 'provider') {
-        registerData.phone = formData.phone
-
-        if (providerType === 'professional') {
-          registerData.role = USER_ROLES.PROFESSIONAL
-          registerData.cedula = formData.cedula
-          registerData.specialty = formData.specialty
-          registerData.category = formData.category
-        } else if (providerType === 'trade') {
-          registerData.role = USER_ROLES.TRADE
-          registerData.trade = formData.trade
-        } else if (providerType === 'business') {
-          registerData.role = USER_ROLES.BUSINESS
-          registerData.businessName = formData.businessName
-          registerData.address = formData.address
-          registerData.businessHours = formData.businessHours
-        }
-      }
-
-      // simulación local si no existe api
-      const users = loadUsers()
-      const newUser = {
-        id: `user_${Date.now()}`,
-        ...registerData,
-        status: 'active',
-        isActive: true,
-      }
-
-      if (providerType === 'professional') {
-        // especial: pendiente de aprobación
-        newUser.status = 'pending'
-        newUser.isActive = false
-        saveUsers([...users, newUser])
-        alert('Tu registro está pendiente de aprobación. Un administrador revisará tu información.')
-        setLoading(false)
-        navigate('/login')
-        return
-      }
-
-      // para cualquier otro usuario guardamos y autologin
-      saveUsers([...users, newUser])
-      login(newUser)
-      navigate(newUser.role === USER_ROLES.CLIENT ? '/dashboard/client' : '/dashboard/provider')
+      // Registrar en el backend
+      const response = await authService.register(registerData)
+      
+      // Mostrar mensaje de éxito
+      alert('¡Registro exitoso! Por favor inicia sesión.')
+      navigate('/login')
 
     } catch (error) {
-      setGeneralError(error.response?.data?.message || 'Error al registrarse')
+      console.error('Error de registro:', error)
+      if (error.response?.status === 400) {
+        setGeneralError(error.response.data.error || 'El email ya está registrado')
+      } else if (error.response?.data?.error) {
+        setGeneralError(error.response.data.error)
+      } else {
+        setGeneralError('Error al conectar con el servidor. Verifica que esté ejecutándose.')
+      }
     } finally {
       setLoading(false)
     }

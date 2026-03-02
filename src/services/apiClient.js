@@ -1,9 +1,10 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 /**
  * Cliente HTTP configurado para todas las peticiones API
+ * Conecta con backend Node.js en puerto 5000
  */
 const apiClient = axios.create({
   baseURL: API_URL,
@@ -31,6 +32,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken')
       localStorage.removeItem('user')
+      localStorage.removeItem('userRole')
       window.location.href = '/login'
     }
     return Promise.reject(error)
