@@ -1,17 +1,25 @@
-import mysql from 'mysql2/promise'
-import dotenv from 'dotenv'
+// api/config/database.js
+import { Pool } from "pg";
+import dotenv from "dotenv";
 
-dotenv.config()
+dotenv.config();
 
-const pool = mysql.createPool({
+const pool = new Pool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD || '',
+  password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-})
+  port: process.env.DB_PORT,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
 
-export default pool
+// Solo para testear la conexión
+pool.connect()
+  .then(() => console.log("✅ Conectado a PostgreSQL"))
+  .catch(err => console.error("❌ Error conexión DB:", err));
+
+// Export default para que se pueda importar así:
+// import pool from '../config/database.js'
+export default pool;

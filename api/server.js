@@ -8,25 +8,37 @@ dotenv.config()
 
 const app = express()
 
-// Middlewares
+// ===== CONFIGURACIÓN CORS =====
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://smartworkrl.onrender.com' // TU FRONTEND EN PRODUCCIÓN
+  ],
   credentials: true
 }))
+
+// ===== MIDDLEWARES =====
 app.use(express.json())
 
-// Rutas
+// ===== RUTAS =====
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 
-// Ruta de prueba
+// ===== HEALTH CHECK =====
 app.get('/api/health', (req, res) => {
-  res.json({ mensaje: 'Backend funcionando correctamente' })
+  res.json({ mensaje: 'Backend funcionando ' })
 })
 
-// Iniciar servidor
-const PORT = process.env.PORT || 5000
-app.listen(PORT, () => {
-  console.log(` Servidor ejecutándose en puerto ${PORT}`)
-  console.log(`Documentación: http://localhost:${PORT}/api/health`)
+// ===== MANEJO GLOBAL DE ERRORES =====
+app.use((err, req, res, next) => {
+  console.error(err.stack)
+  res.status(500).json({ error: 'Error interno del servidor' })
+})
+
+// ===== PUERTO PARA RENDER =====
+const PORT = process.env.PORT || 10000
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀YA QUEDOOOOOOOOOO ${PORT}`)
 })
